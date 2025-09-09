@@ -27,23 +27,22 @@ jobs:
           git config --global --add safe.directory "$(pwd)"
           git ls-files -z > filelist.txt
 
-      - name: Create .fossid config for filescan
+      - name: Create .fossid config (key=value)
         env:
           FOSSID_HOST:  ${{ secrets.FOSSID_HOST }}
           FOSSID_TOKEN: ${{ secrets.FOSSID_TOKEN }}
         run: |
-          cat > .fossid <<EOF
           {
-            "server": "${FOSSID_HOST}",
-            "token": "${FOSSID_TOKEN}"
-          }
-          EOF
+            echo "server=${FOSSID_HOST}"
+            echo "token=${FOSSID_TOKEN}"
+          } > .fossid
+          # 디버그용(토큰 노출 방지): 서버만 찍기
+          grep '^server=' .fossid
 
       - name: VSF across tracked files
         run: |
           fossid version || true
           : > vsf.ndjson
-          # 설정파일 경로는 "디렉터리"가 아니라 "파일(.fossid)"을 지정해야 합니다.
           while IFS= read -r -d "" f; do
             fossid filescan --mode vsf \
               --fossid-conf-path ./.fossid \
