@@ -1,0 +1,51 @@
+name: FossID VSF sweep (full repo)
+
+on:
+  workflow_dispatch: {}      # 수동 실행
+  schedule:
+    - cron: "0 18 * * 1"     # 매주 월요일 18:00 KST (UTC+9 → cron은 UTC 기준 조정 필요)
+
+jobs:
+  vsf:
+    runs-on: ubuntu-latest
+    container:
+      image: quay.io/fossid/fossid-toolbox:latest
+      credentials:
+        username: ${{ secrets.QUAY_USERNAME }}
+        password: ${{ secrets.QUAY_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run VSF across tracked files
+        env:
+          FOSSID_HOST:  ${{ secrets.FOSSID_HOST }}
+          FOSSID_TOKEN: ${{ secrets.FOSSID_TOKEN }}
+        run: |
+          # tracked file 목록 기준 병렬 스캔(필요시 경로 필터 추가)
+          : > vsf.ndjson
+          git ls-files -z \
+          | xargs -0 -n1 -P 4 sh -c '
+              fossid filescan --mode vsf \
+                --fossid-host "$FOSSID_HOST" \
+                --fossid-token "$FOSSID_TOKEN" \
+                "$1" || true
+            ' sh >> vsf.ndjson
+
+      - name: Summarize & gate on VSF hits
+        run: |
+          # 취약 스니펫만 추출해 카운트
+          hits=$(grep -c '"type":"vulnerability"' vsf.ndjson || true)
+          echo "VSF vulnerable-snippet hits: $hits"
+          if [ "$hits" -gt 0 ]; then
+            echo "Found vulnerable code snippets. Failing."
+            exit 1
+          fi
+
+      - name: Upload artifact (raw NDJSON)
+        uses: actions/upload-artifact@v4
+        with:
+          name: fossid-vsf-ndjson
+          path: vsf.ndjson
