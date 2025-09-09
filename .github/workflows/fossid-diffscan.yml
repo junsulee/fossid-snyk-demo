@@ -1,0 +1,36 @@
+name: FossID DIFFSCAN (PR gate)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  diffscan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write   # PR 어노테이션용
+    container:
+      image: quay.io/fossid/fossid-toolbox:latest
+      credentials:
+        username: ${{ secrets.QUAY_USERNAME }}
+        password: ${{ secrets.QUAY_PASSWORD }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # 히스토리 필요 시 안전하게 전체
+
+      - name: FossID diffscan (license:new, vsf:all)
+        env:
+          FOSSID_HOST:  ${{ secrets.FOSSID_HOST }}
+          FOSSID_TOKEN: ${{ secrets.FOSSID_TOKEN }}
+        run: |
+          fossid -v info diffscan \
+            --fossid-host "$FOSSID_HOST" \
+            --fossid-token "$FOSSID_TOKEN" \
+            --license-mode new \
+            --vsf-mode all \
+            --github-workflow-errors \
+            --fail
