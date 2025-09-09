@@ -3,11 +3,18 @@ name: FossID VSF sweep (full repo)
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 9 * * 1'  # 월요일 09:00 UTC = 한국시간 월요일 18:00
+    - cron: '0 9 * * 1'  # 월요일 09:00 UTC = 한국시간 18:00
 
 jobs:
   vsf:
     runs-on: ubuntu-latest
+    environment: fossid  # Environments → fossid 의 시크릿 사용
+
+    container:
+      image: quay.io/fossid/fossid-toolbox:latest
+      credentials:
+        username: ${{ secrets.QUAY_USERNAME }}
+        password: ${{ secrets.QUAY_PASSWORD }}
 
     steps:
       - name: Checkout
@@ -15,36 +22,22 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Pull toolbox image
-        run: |
-          docker pull quay.io/fossid/fossid-toolbox:latest
-
       - name: Generate tracked file list
-        run: |
-          git ls-files -z > filelist.txt
+        run: git ls-files -z > filelist.txt
 
-      - name: Run VSF across tracked files (inside container)
+      - name: Run VSF across tracked files
         env:
           FOSSID_HOST:  ${{ secrets.FOSSID_HOST }}
           FOSSID_TOKEN: ${{ secrets.FOSSID_TOKEN }}
         run: |
-          # 컨테이너 안에서 파일 리스트를 읽어 VSF 스캔하고 NDJSON에 누적
-          docker run --rm \
-            -v "$PWD":/workspace \
-            -w /workspace \
-            -e FOSSID_HOST \
-            -e FOSSID_TOKEN \
-            quay.io/fossid/fossid-toolbox:latest \
-            sh -lc '
-              : > /workspace/vsf.ndjson
-              # filelist.txt 는 널 구분(-z)이라 read -d "" 로 처리
-              while IFS= read -r -d "" f; do
-                fossid filescan --mode vsf \
-                  --fossid-host "$FOSSID_HOST" \
-                  --fossid-token "$FOSSID_TOKEN" \
-                  "$f" || true
-              done < /workspace/filelist.txt >> /workspace/vsf.ndjson
-            '
+          : > vsf.ndjson
+          # filelist.txt 는 널 구분(-z)이라 read -d "" 로 처리
+          while IFS= read -r -d "" f; do
+            fossid filescan --mode vsf \
+              --fossid-host "$FOSSID_HOST" \
+              --fossid-token "$FOSSID_TOKEN" \
+              "$f" || true
+          done < filelist.txt >> vsf.ndjson
 
       - name: Summarize & gate on VSF hits
         run: |
