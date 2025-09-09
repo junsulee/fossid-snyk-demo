@@ -1,9 +1,9 @@
 name: FossID VSF sweep (full repo)
 
 on:
-  workflow_dispatch: {}      # 수동 실행
+  workflow_dispatch:
   schedule:
-    - cron: "0 18 * * 1"     # 매주 월요일 18:00 KST (UTC+9 → cron은 UTC 기준 조정 필요)
+    - cron: '0 9 * * 1'  # 월요일 09:00 UTC = 한국시간 월요일 18:00
 
 jobs:
   vsf:
@@ -24,7 +24,6 @@ jobs:
           FOSSID_HOST:  ${{ secrets.FOSSID_HOST }}
           FOSSID_TOKEN: ${{ secrets.FOSSID_TOKEN }}
         run: |
-          # tracked file 목록 기준 병렬 스캔(필요시 경로 필터 추가)
           : > vsf.ndjson
           git ls-files -z \
           | xargs -0 -n1 -P 4 sh -c '
@@ -36,7 +35,6 @@ jobs:
 
       - name: Summarize & gate on VSF hits
         run: |
-          # 취약 스니펫만 추출해 카운트
           hits=$(grep -c '"type":"vulnerability"' vsf.ndjson || true)
           echo "VSF vulnerable-snippet hits: $hits"
           if [ "$hits" -gt 0 ]; then
