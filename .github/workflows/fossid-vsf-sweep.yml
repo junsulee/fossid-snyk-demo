@@ -27,16 +27,27 @@ jobs:
           git config --global --add safe.directory "$(pwd)"
           git ls-files -z > filelist.txt
 
-      - name: Run VSF across tracked files
+      - name: Create .fossid config (for filescan)
         env:
           FOSSID_HOST:  ${{ secrets.FOSSID_HOST }}
           FOSSID_TOKEN: ${{ secrets.FOSSID_TOKEN }}
         run: |
+          # filescan은 CLI 플래그 대신 설정파일을 요구합니다.
+          # 컨테이너 워크디렉터리에 .fossid 생성
+          cat > .fossid <<EOF
+          {
+            "server": "${FOSSID_HOST}",
+            "token": "${FOSSID_TOKEN}"
+          }
+          EOF
+
+      - name: Run VSF across tracked files
+        run: |
           : > vsf.ndjson
+          # -mode vsf (단일 대시!) + --fossid-conf-path 로 .fossid를 지정
           while IFS= read -r -d "" f; do
-            fossid filescan --mode vsf \
-              --fossid-host "$FOSSID_HOST" \
-              --fossid-token "$FOSSID_TOKEN" \
+            fossid filescan -mode vsf \
+              --fossid-conf-path . \
               "$f" || true
           done < filelist.txt >> vsf.ndjson
 
@@ -45,12 +56,4 @@ jobs:
           hits=$(grep -c '"type":"vulnerability"' vsf.ndjson || true)
           echo "VSF vulnerable-snippet hits: $hits"
           if [ "$hits" -gt 0 ]; then
-            echo "Found vulnerable code snippets. Failing."
-            exit 1
-          fi
-
-      - name: Upload artifact (raw NDJSON)
-        uses: actions/upload-artifact@v4
-        with:
-          name: fossid-vsf-ndjson
-          path: vsf.ndjson
+            echo "Found vulnerable code snipp
