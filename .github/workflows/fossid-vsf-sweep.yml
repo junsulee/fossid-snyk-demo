@@ -8,7 +8,7 @@ on:
 jobs:
   vsf:
     runs-on: ubuntu-latest
-    environment: fossid  # Environments → fossid 의 시크릿 사용
+    environment: fossid
 
     container:
       image: quay.io/fossid/fossid-toolbox:latest
@@ -23,7 +23,9 @@ jobs:
           fetch-depth: 0
 
       - name: Generate tracked file list
-        run: git ls-files -z > filelist.txt
+        run: |
+          git config --global --add safe.directory "$(pwd)"
+          git ls-files -z > filelist.txt
 
       - name: Run VSF across tracked files
         env:
@@ -31,7 +33,6 @@ jobs:
           FOSSID_TOKEN: ${{ secrets.FOSSID_TOKEN }}
         run: |
           : > vsf.ndjson
-          # filelist.txt 는 널 구분(-z)이라 read -d "" 로 처리
           while IFS= read -r -d "" f; do
             fossid filescan --mode vsf \
               --fossid-host "$FOSSID_HOST" \
