@@ -8,30 +8,43 @@ on:
 jobs:
   vsf:
     runs-on: ubuntu-latest
-    container:
-      image: quay.io/fossid/fossid-toolbox:latest
-      credentials:
-        username: ${{ secrets.QUAY_USERNAME }}
-        password: ${{ secrets.QUAY_PASSWORD }}
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Run VSF across tracked files
+      - name: Pull toolbox image
+        run: |
+          docker pull quay.io/fossid/fossid-toolbox:latest
+
+      - name: Generate tracked file list
+        run: |
+          git ls-files -z > filelist.txt
+
+      - name: Run VSF across tracked files (inside container)
         env:
           FOSSID_HOST:  ${{ secrets.FOSSID_HOST }}
           FOSSID_TOKEN: ${{ secrets.FOSSID_TOKEN }}
         run: |
-          : > vsf.ndjson
-          git ls-files -z \
-          | xargs -0 -n1 -P 4 sh -c '
-              fossid filescan --mode vsf \
-                --fossid-host "$FOSSID_HOST" \
-                --fossid-token "$FOSSID_TOKEN" \
-                "$1" || true
-            ' sh >> vsf.ndjson
+          # 컨테이너 안에서 파일 리스트를 읽어 VSF 스캔하고 NDJSON에 누적
+          docker run --rm \
+            -v "$PWD":/workspace \
+            -w /workspace \
+            -e FOSSID_HOST \
+            -e FOSSID_TOKEN \
+            quay.io/fossid/fossid-toolbox:latest \
+            sh -lc '
+              : > /workspace/vsf.ndjson
+              # filelist.txt 는 널 구분(-z)이라 read -d "" 로 처리
+              while IFS= read -r -d "" f; do
+                fossid filescan --mode vsf \
+                  --fossid-host "$FOSSID_HOST" \
+                  --fossid-token "$FOSSID_TOKEN" \
+                  "$f" || true
+              done < /workspace/filelist.txt >> /workspace/vsf.ndjson
+            '
 
       - name: Summarize & gate on VSF hits
         run: |
