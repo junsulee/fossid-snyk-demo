@@ -24,7 +24,6 @@ jobs:
 
       - name: Generate tracked file list
         run: |
-          # 컨테이너에서 마운트된 깃 워크스페이스를 안전 경로로 등록
           git config --global --add safe.directory "$(pwd)"
           git ls-files -z > filelist.txt
 
@@ -40,19 +39,19 @@ jobs:
           }
           EOF
 
-      - name: Run VSF across tracked files
+      - name: VSF across tracked files
         run: |
+          fossid version || true
           : > vsf.ndjson
-          # filescan은 설정파일(.fossid) 경로를 --fossid-conf-path 로 지정
+          # 설정파일 경로는 "디렉터리"가 아니라 "파일(.fossid)"을 지정해야 합니다.
           while IFS= read -r -d "" f; do
             fossid filescan --mode vsf \
-              --fossid-conf-path . \
+              --fossid-conf-path ./.fossid \
               "$f" || true
           done < filelist.txt >> vsf.ndjson
 
       - name: Summarize & gate on VSF hits
         run: |
-          # NDJSON에 취약 스니펫(type:vulnerability) 카운트
           hits=$(grep -c '"type":"vulnerability"' vsf.ndjson || true)
           echo "VSF vulnerable-snippet hits: $hits"
           if [ "$hits" -gt 0 ]; then
